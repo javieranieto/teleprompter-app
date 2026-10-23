@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teleprompter</title>
+<meta name="description" content="Teleprompter gratis en tu navegador: sigue tu voz, se detiene cuando te detienes. Por Javier Nieto.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%231f2326'/%3E%3Cpath d='M140 170H360A43 43 0 0 1 360 256H152A43 43 0 0 0 152 342H300' stroke='%23f2f2f2' stroke-width='26' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Ccircle cx='256' cy='256' r='26' fill='%23FF6A3D'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+<!--
+  Teleprompter, por Javier Nieto. Gratis y de codigo abierto (MIT).
+  Pagina: https://javiernieto.net/profesional/recursos/teleprompter/
+  Un solo archivo. En linea (https) Chrome recuerda el permiso del microfono; abierto como
+  archivo lo vuelve a pedir: para eso esta abrir_teleprompter.pyw en el repo.
+-->
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --panel: #141414;
+    --field: #1e1e1e;
+    --line: #2e2e2e;
+    --text: #f2f2f2;
+    --muted: #9a9a9a;
+    --accent: #FF6A3D;
+    --accent-hover: #e8552a;
+    --amber: #fbbf24;
+    --danger: #ef4444;
+    --panel-w: 340px;
+    --read: 22%;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    display: flex;
+  }
+
+  /* --- Panel --- */
+  #sidebar {
+    width: var(--panel-w);
+    flex: 0 0 var(--panel-w);
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    padding: 1.1rem 1.1rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    height: 100%;
+    overflow-y: auto;
+    z-index: 100;
+  }
+  #sidebar > * { flex-shrink: 0; }
+  body.panel-oculto #sidebar { display: none; }
+  .marca { display: flex; align-items: center; gap: 0.6rem; }
+  .marca svg { width: 34px; height: 34px; flex: none; }
+  .marca h1 { font-size: 1.1rem; font-weight: 600; line-height: 1.15; }
+  .marca small { display: block; font-size: 0.75rem; font-weight: 400; color: var(--muted); }
+  .autor { border: 1px solid var(--line); border-radius: 8px; padding: 0.8rem; font-size: 0.8rem; color: var(--muted); line-height: 1.55; display: flex; flex-direction: column; gap: 0.35rem; }
+  .autor b { color: var(--text); font-weight: 600; }
+  .autor a { color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; min-height: 44px; }
+  .autor a:hover { text-decoration: underline; }
+  .seccion { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 0.4rem; }
+  textarea {
+    width: 100%; height: 170px; background: var(--field); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px; padding: 0.7rem;
+    font: inherit; font-size: 0.9rem; resize: vertical; outline: none;
+  }
+  textarea:focus, select:focus { border-color: var(--accent); }
+  .stats { font-size: 0.82rem; color: var(--muted); background: var(--field); padding: 0.55rem 0.7rem; border-radius: 6px; line-height: 1.5; }
+  .stats b { color: var(--text); font-weight: 600; }
+  .fila { display: flex; gap: 0.5rem; }
+  button, .boton-archivo {
+    flex: 1; min-height: 44px; background: #262626; color: var(--text);
+    border: 1px solid var(--line); padding: 0.55rem 0.6rem; border-radius: 6px;
+    cursor: pointer; font: inherit; font-size: 0.85rem; font-weight: 500;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+  }
+  button:hover, .boton-archivo:hover { background: #303030; }
+  button.primario { background: var(--accent); border-color: var(--accent); color: #1f2326; font-weight: 600; }
+  button.primario:hover { background: var(--accent-hover); }
+  button.activo { border-color: var(--accent); color: #fff; background: rgba(255,106,61,0.18); }
+  button.grabando { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,0.12); }
+  .boton-archivo input { display: none; }
+  select {
+    width: 100%; min-height: 44px; background: var(--field); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px; padding: 0 0.6rem; font: inherit; font-size: 0.85rem; outline: none;
+  }
+  .control { display: flex; flex-direction: column; gap: 0.3rem; }
+  .control label { font-size: 0.82rem; color: var(--muted); display: flex; justify-content: space-between; gap: 0.5rem; }
+  .control label span:last-child { color: var(--text); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; height: 28px; }
+  .ayuda { font-size: 0.75rem; color: #7a7a7a; line-height: 1.55; }
+  .ayuda kbd { background: #262626; border: 1px solid #3a3a3a; border-radius: 4px; padding: 0 0.3rem; font-family: inherit; color: #bbb; }
+
+  /* --- Prompter --- */
+  #area { flex: 1; position: relative; height: 100%; overflow: hidden; min-width: 0; }
+  body.corriendo #area { cursor: none; }
+  #envoltura {
+    height: 100%; overflow-y: auto; position: relative;
+    scrollbar-width: none; -ms-overflow-style: none;
+  }
+  #envoltura::-webkit-scrollbar { display: none; }
+  #contenido {
+    position: relative;
+    margin: 0 auto;
+    max-width: 1600px;
+    font-weight: 500;
+    color: #fff;
+    overflow-wrap: break-word;
+  }
+  #contenido.espejo { transform: scaleX(-1); }
+  .ln { min-height: 1em; }
+  .ln.blank { height: 0.6em; min-height: 0; }
+  .ln.head {
+    font-size: 0.36em; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; padding-top: 0.6em;
+  }
+  .ln.item { color: var(--amber); font-weight: 700; }
+  .ln.note { color: #d6b45c; font-size: 0.62em; font-weight: 500; }
+  .w { transition: opacity 0.25s, color 0.25s; }
+  body.atenuar .w.leido { opacity: 0.28; }
+  .w.ahora { color: #fff; }
+
+  #guia {
+    position: absolute; top: var(--read); left: 3%; right: 3%; height: 0;
+    border-top: 2px solid rgba(255,106,61,0.6);
+    z-index: 20; pointer-events: none; display: none;
+  }
+  #guia::before, #guia::after {
+    content: ""; position: absolute; top: -9px; border: 8px solid transparent;
+  }
+  #guia::before { left: -14px; border-left-color: var(--accent); }
+  #guia::after { right: -14px; border-right-color: var(--accent); }
+  body.con-guia #guia { display: block; }
+
+  .degradado { position: absolute; left: 0; right: 0; pointer-events: none; z-index: 10; }
+  .degradado.arriba { top: 0; height: calc(var(--read) - 3vh); background: linear-gradient(to bottom, rgba(10,10,10,0.95), rgba(10,10,10,0)); }
+  .degradado.abajo { bottom: 0; height: 18vh; background: linear-gradient(to top, rgba(10,10,10,1), rgba(10,10,10,0)); }
+
+  #hud {
+    position: absolute; right: 16px; bottom: 14px; z-index: 30;
+    font-size: 14px; color: #8a8a8a; font-variant-numeric: tabular-nums;
+    background: rgba(20,20,20,0.75); border: 1px solid #262626; border-radius: 999px; padding: 0.35rem 0.85rem;
+    pointer-events: none; max-width: calc(100% - 32px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #aviso {
+    position: absolute; left: 50%; bottom: 60px; transform: translateX(-50%); z-index: 30;
+    font-size: 15px; color: var(--amber); background: rgba(20,20,20,0.85); border: 1px solid #3a3320;
+    border-radius: 8px; padding: 0.5rem 0.9rem; pointer-events: none; display: none;
+    max-width: calc(100% - 32px); text-align: center;
+  }
+  #cuenta {
+    position: absolute; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center;
+    font-size: 30vh; font-weight: 700; color: rgba(255,255,255,0.9); background: rgba(10,10,10,0.55);
+    pointer-events: none;
+  }
+  #btn-panel {
+    position: absolute; left: 16px; bottom: 14px; z-index: 50; flex: none;
+    background: rgba(20,20,20,0.8); border-radius: 999px; padding: 0 1.1rem; display: none;
+  }
+  body.panel-oculto #btn-panel { display: flex; }
+  body.corriendo #btn-panel { opacity: 0; }
+  #suelta {
+    position: fixed; inset: 0; z-index: 200; display: none; align-items: center; justify-content: center;
+    background: rgba(255,106,61,0.18); border: 3px dashed var(--accent); font-size: 1.4rem; pointer-events: none;
+  }
+  body.arrastrando #suelta { display: flex; }
+
+  /* En pantalla angosta el panel va encima y el prompter usa todo el ancho */
+  @media (max-width: 760px) {
+    #sidebar { position: fixed; inset: 0; width: 100%; border-right: 0; }
+    #area { width: 100%; }
+  }
+</style>
+</head>
+<body class="con-guia atenuar">
+
+<aside id="sidebar">
+  <div class="marca">
+    <svg viewBox="104 140 304 230" aria-hidden="true"><path d="M140 170H360A43 43 0 0 1 360 256H152A43 43 0 0 0 152 342H300" stroke="#f2f2f2" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="256" cy="256" r="26" fill="#FF6A3D"/></svg>
+    <h1>Teleprompter<small>por Javier Nieto</small></h1>
+  </div>
+
+  <div class="fila">
+    <label class="boton-archivo">Abrir .txt<input type="file" id="archivo" accept=".txt,.md,text/plain"></label>
+    <button id="btn-limpiar">Borrar</button>
+    <button id="btn-ejemplo">Ejemplo</button>
+  </div>
+  <textarea id="texto" placeholder="Pega tu guion aquí, o arrastra un .txt a la ventana.
+
+Tres líneas en blanco separan una toma de otra.
+ARRANQUE / BLOQUES / CIERRE se reconocen solos."></textarea>
+  <div class="stats" id="stats">Sin texto.</div>
+
+  <div class="seccion">Toma</div>
+  <select id="toma"></select>
+  <div class="fila">
+    <button id="btn-ant">◀ Anterior</button>
+    <button id="btn-sig">Siguiente ▶</button>
+  </div>
+
+  <div class="fila">
+    <button id="btn-play" class="primario">▶ Iniciar</button>
+    <button id="btn-reset">⏮ Desde el inicio</button>
+  </div>
+  <button id="btn-voz">🎙 Seguir mi voz: No</button>
+
+  <div class="seccion">Ritmo</div>
+  <div id="controles-ritmo"></div>
+
+  <div class="seccion">Pantalla</div>
+  <div id="controles-pantalla"></div>
+  <div class="fila">
+    <button id="btn-alinear">Centro</button>
+    <button id="btn-guia">Línea guía</button>
+  </div>
+  <div class="fila">
+    <button id="btn-atenuar">Atenuar lo leído</button>
+    <button id="btn-espejo">Espejo</button>
+  </div>
+  <div class="fila">
+    <button id="btn-bloques">Parar en cada bloque</button>
+    <button id="btn-cuenta">Cuenta: 3 s</button>
+  </div>
+
+  <div class="fila">
+    <button id="btn-full">Pantalla completa</button>
+    <button id="btn-ocultar">Ocultar panel</button>
+  </div>
+
+  <div class="ayuda">
+    <kbd>Espacio</kbd> o clic en el texto: iniciar / pausar ·
+    <kbd>↓</kbd> <kbd>→</kbd> <kbd>AvPág</kbd>: siguiente párrafo o bloque ·
+    <kbd>↑</kbd> <kbd>←</kbd> <kbd>RePág</kbd>: párrafo anterior ·
+    <kbd>Shift</kbd>+<kbd>↑↓</kbd>: velocidad ·
+    <kbd>N</kbd>/<kbd>P</kbd>: toma siguiente / anterior ·
+    <kbd>R</kbd>: desde el inicio · <kbd>V</kbd>: seguir mi voz ·
+    <kbd>+</kbd>/<kbd>-</kbd>: tamaño · <kbd>H</kbd>: panel · <kbd>F</kbd>: pantalla completa ·
+    <kbd>M</kbd>: espejo
+  </div>
+
+  <div class="autor">
+    <span>Lo hice para grabar mis videos y lo regalo. Tu texto se queda en tu navegador.</span>
+    <span>Si te sirve, sígueme: <b>@holajaviernieto</b></span>
+    <span><a href="https://www.threads.net/@holajaviernieto" target="_blank" rel="noopener">Threads</a> · <a href="https://www.instagram.com/holajaviernieto/" target="_blank" rel="noopener">Instagram</a> · <a href="https://javiernieto.net/profesional/recursos/" target="_blank" rel="noopener">Más herramientas gratis</a></span>
+  </div>
+</aside>
+
+<main id="area">
+  <div class="degradado arriba"></div>
+  <div id="guia"></div>
+  <div id="envoltura"><div id="contenido"></div></div>
+  <div class="degradado abajo"></div>
+  <div id="cuenta"></div>
+  <div id="aviso"></div>
+  <div id="hud"></div>
+  <button id="btn-panel">Panel (H)</button>
+</main>
+<div id="suelta">Suelta el .txt aquí</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Ajustes (se guardan en el navegador) y estado de la lectura
+// ---------------------------------------------------------------------------
+const AJUSTES_POR_OMISION = {
+  texto: "", toma: 0,
+  ppm: 130,        // palabras por minuto: la velocidad es de LECTURA, no de pixeles
+  pausa: 0.6,      // segundos que vale una linea en blanco
+  tam: 64, margen: 22, interlineado: 1.35, lectura: 22,
+  centro: true, guia: true, atenuar: true, espejo: false,
+  bloques: true, cuenta: 3
+};
+const S = Object.assign({}, AJUSTES_POR_OMISION);
+
+const R = {
+  tomas: [], corriendo: false, escuchando: false, pos: 0, total: 0,
+  filas: [], U: [], mitades: [], paradas: [], parrafos: [], palabras: [],
+  filaActual: -1, ultimoTs: 0, transcurrido: 0, raf: null,
+  scrollPuesto: -1, objetivoVoz: null, cuentaTimer: null, avisoTimer: null
+};
+
+const $ = id => document.getElementById(id);
+const el = {
+  texto: $("texto"), stats: $("stats"), toma: $("toma"), envoltura: $("envoltura"),
+  contenido: $("contenido"), hud: $("hud"), aviso: $("aviso"), cuenta: $("cuenta"),
+  play: $("btn-play"), voz: $("btn-voz")
+};
+
+const CLAVE = "teleprompter_v2";
+const EJEMPLO = "ARRANQUE\nEste teleprompter me escucha.\n\nCuando hablo, el texto avanza conmigo. Cuando me detengo, se espera.\n\nAsí no tengo que acelerar para alcanzarlo, ni quedarme callado mientras se va.\n\nBLOQUES — esto NO se lee\n1. Lo que va en ámbar es para platicar, no para leer: aquí se detiene y tú sigues a tu ritmo.\n2. Una línea en blanco es una pausa. Tres líneas en blanco separan una toma de otra.\n\nCIERRE\nPega tu guion a la izquierda, activa «Seguir mi voz» y graba.\nEs gratis, y lo encuentras en javiernieto.net.";
+function guardar() {
+  try { localStorage.setItem(CLAVE, JSON.stringify(S)); } catch (e) {}
+}
+function cargar() {
+  try {
+    const g = JSON.parse(localStorage.getItem(CLAVE) || "null");
+    if (g) Object.assign(S, g);
+    else S.texto = EJEMPLO; // la primera vez abre con el ejemplo, no vacio
+  } catch (e) {}
+}
+
+// ---------------------------------------------------------------------------
+// Lectura del guion: tomas, encabezados y bloques
+// ---------------------------------------------------------------------------
+const quitarAcentos = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+const RX_ENCABEZADO = /^\s*(ARRANQUE|BLOQUES|BLOQUE\s+\d+|CIERRE|MANDATORIO|DESARROLLA)\b\s*[:—–-]?\s*/i;
+
+function partirTomas(texto) {
+  const t = texto.replace(/\r\n?/g, "\n").replace(/^\s*\n/, "").replace(/\s+$/, "");
+  if (!t.trim()) return [];
+  // Tres o mas lineas en blanco separan una toma de otra (formato de las tandas).
+  return t.split(/\n(?:[ \t]*\n){3,}/).map(s => s.replace(/^\s*\n/, "").replace(/\s+$/, "")).filter(s => s.trim());
+}
+
+function clasificar(texto) {
+  const salida = [];
+  let modo = "say";
+  for (const linea of texto.split("\n")) {
+    if (!linea.trim()) { salida.push({ t: "blank" }); continue; }
+    const m = linea.match(RX_ENCABEZADO);
+    if (m) {
+      const palabra = quitarAcentos(m[1].toUpperCase());
+      const resto = linea.slice(m[0].length).trim();
+      const restoNorm = quitarAcentos(resto.toUpperCase());
+      // "BLOQUES — esto NO se lee" y "DESARROLLA:" son para platicar, no para leer.
+      const seDice = palabra === "BLOQUES" || palabra === "DESARROLLA" || /NO SE LEE|SE DICE/.test(restoNorm);
+      modo = seDice ? "dice" : "say";
+      const esEtiqueta = !resto || /^ESTO\b/.test(restoNorm) || palabra === "BLOQUES" || palabra === "ARRANQUE" || palabra === "CIERRE";
+      salida.push({ t: "head", texto: esEtiqueta ? linea.trim() : m[1], parada: true });
+      if (!esEtiqueta) salida.push({ t: modo === "dice" ? "note" : "say", texto: resto });
+      continue;
+    }
+    if (modo === "dice" && /^\s*\d+[.)]\s/.test(linea)) { salida.push({ t: "item", texto: linea.trim(), parada: true }); continue; }
+    salida.push({ t: modo === "dice" ? "note" : "say", texto: linea.trim() });
+  }
+  return salida;
+}
+
+// Lo que se lee a la velocidad elegida pesa 1 por palabra; las notas de un bloque
+// platicado pasan rapido (no se leen) y un encabezado pesa como una palabra.
+const PESO = { say: 1, item: 1, note: 0.3 };
+
+function pintarToma() {
+  const toma = R.tomas[S.toma] || "";
+  el.contenido.innerHTML = "";
+  R.lineas = clasificar(toma);
+  if (!R.tomas.length) {
+    const d = document.createElement("div");
+    d.className = "ln say";
+    d.textContent = "Pega tu guion en el panel o arrastra un .txt a esta ventana.";
+    el.contenido.appendChild(d);
+    R.lineas = [{ t: "say", texto: d.textContent }];
+    R.lineas[0].div = d;
+  } else {
+    for (const ln of R.lineas) {
+      const d = document.createElement("div");
+      d.className = "ln " + ln.t;
+      if (ln.t !== "blank") {
+        for (const trozo of ln.texto.split(/(\s+)/)) {
+          if (!trozo) continue;
+          if (/^\s+$/.test(trozo)) { d.appendChild(document.createTextNode(" ")); continue; }
+          const s = document.createElement("span");
+          s.className = "w";
+          s.textContent = trozo;
+          d.appendChild(s);
+        }
+      }
+      ln.div = d;
+      el.contenido.appendChild(d);
+    }
+  }
+  medir();
+}
+
+// Agrupa las palabras en renglones REALES (como quedaron al ajustar el ancho) y arma
+// la linea de tiempo: cada renglon tiene su posicion en "unidades" (palabras + pausas).
+function medir() {
+  const alto = el.envoltura.clientHeight;
+  const lecturaPx = alto * S.lectura / 100;
+  el.contenido.style.paddingTop = lecturaPx + "px";
+  el.contenido.style.paddingBottom = alto + "px";
+
+  const pausaU = S.pausa * S.ppm / 60;
+  const filas = [];
+  for (const ln of R.lineas) {
+    const d = ln.div;
+    if (ln.t === "blank") { filas.push({ y: d.offsetTop, h: d.offsetHeight, u: pausaU, spans: [], ln }); continue; }
+    const spans = d.querySelectorAll(".w");
+    const propias = [];
+    let fila = null;
+    for (const s of spans) {
+      if (!fila || Math.abs(s.offsetTop - fila.y) > 3) {
+        fila = { y: s.offsetTop, h: s.offsetHeight, spans: [], ln };
+        propias.push(fila);
+      }
+      fila.spans.push(s);
+    }
+    if (!propias.length) propias.push({ y: d.offsetTop, h: d.offsetHeight, spans: [], ln });
+    for (const f of propias) f.u = ln.t === "head" ? 1 / propias.length : f.spans.length * (PESO[ln.t] || 1);
+    propias[0].inicioLinea = true;
+    filas.push(...propias);
+  }
+
+  R.filas = filas;
+  R.U = []; R.mitades = []; R.paradas = []; R.parrafos = []; R.palabras = [];
+  let u = 0, anteriorEnBlanco = true, palabrasDesdeParada = 1;
+  filas.forEach((f, i) => {
+    R.U.push(u);
+    R.mitades.push(f.y + f.h / 2);
+    if (f.inicioLinea && f.ln.parada && u > 0.5) {
+      // "BLOQUES — esto no se lee" seguido del bloque 1: si entre dos paradas no hubo
+      // ni una palabra, se para una sola vez, en la segunda. No depende de la velocidad.
+      if (R.paradas.length && !palabrasDesdeParada) R.paradas.pop();
+      R.paradas.push(u);
+      palabrasDesdeParada = 0;
+    }
+    if (f.ln.t !== "blank" && f.ln.t !== "head" && !(f.inicioLinea && f.ln.parada)) palabrasDesdeParada += f.spans.length;
+    if (f.ln.t !== "blank" && (anteriorEnBlanco || f.ln.parada) && f.inicioLinea) R.parrafos.push(u);
+    anteriorEnBlanco = f.ln.t === "blank";
+    if (f.ln.t !== "head") {
+      f.spans.forEach((s, k) => R.palabras.push({ n: normal(s.textContent), u: u + k * (f.u / f.spans.length) }));
+    }
+    u += f.u;
+  });
+  R.total = u;
+  R.pos = Math.min(R.pos, R.total);
+  R.filaActual = -1;
+  ponerScroll();
+  actualizarHud();
+}
+
+// ---------------------------------------------------------------------------
+// Posicion <-> scroll
+// ---------------------------------------------------------------------------
+function indiceDeU(p) {
+  let lo = 0, hi = R.U.length - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (R.U[m] <= p) lo = m; else hi = m - 1; }
+  return lo;
+}
+function yDePos(p) {
+  if (!R.filas.length) return 0;
+  const i = indiceDeU(p), f = R.filas[i];
+  const frac = f.u > 0 ? Math.min(1, (p - R.U[i]) / f.u) : 0;
+  const sig = i + 1 < R.mitades.length ? R.mitades[i + 1] : R.mitades[i];
+  return R.mitades[i] + frac * (sig - R.mitades[i]);
+}
+function posDeY(y) {
+  const M = R.mitades;
+  if (!M.length || y <= M[0]) return 0;
+  for (let i = 0; i < M.length - 1; i++) {
+    if (y < M[i + 1]) return R.U[i] + R.filas[i].u * (y - M[i]) / (M[i + 1] - M[i]);
+  }
+  return R.total;
+}
+function lecturaPx() { return el.envoltura.clientHeight * S.lectura / 100; }
+
+function ponerScroll() {
+  el.envoltura.scrollTop = yDePos(R.pos) - lecturaPx();
+  R.scrollPuesto = el.envoltura.scrollTop;
+  marcarFila();
+}
+
+function marcarFila() {
+  if (!R.filas.length) return;
+  const i = indiceDeU(R.pos);
+  const f = R.filas[i];
+  const actual = f && f.u > 0 && (R.pos - R.U[i]) / f.u > 0.5 && i + 1 < R.filas.length ? i + 1 : i;
+  if (actual === R.filaActual) return;
+  R.filaActual = actual;
+  R.filas.forEach((fila, k) => {
+    for (const s of fila.spans) {
+      s.classList.toggle("leido", k < actual);
+      s.classList.toggle("ahora", k === actual);
+    }
+  });
+}
+
+el.envoltura.addEventListener("scroll", () => {
+  // Si la rueda o el touch movieron el texto, la lectura sigue desde ahi.
+  if (Math.abs(el.envoltura.scrollTop - R.scrollPuesto) > 2) {
+    R.pos = posDeY(el.envoltura.scrollTop + lecturaPx());
+    R.scrollPuesto = el.envoltura.scrollTop;
+    if (R.escuchando) R.objetivoVoz = R.pos;
+    marcarFila();
+    actualizarHud();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Reproduccion
+// ---------------------------------------------------------------------------
+function cuadro(ts) {
+  if (!R.corriendo) return;
+  // Tope alto a proposito: si OBS carga la maquina y bajan los cuadros, la velocidad no cae.
+  const dt = Math.min(0.25, (ts - R.ultimoTs) / 1000);
+  R.ultimoTs = ts;
+  R.transcurrido += dt;
+
+  if (R.escuchando) {
+    if (R.objetivoVoz != null) R.pos += (R.objetivoVoz - R.pos) * Math.min(1, dt * 3);
+  } else {
+    let nueva = R.pos + S.ppm / 60 * dt;
+    if (S.bloques) {
+      // Al parar, pos queda EXACTO en la parada: con ">" estricto no se vuelve a parar ahi.
+      // (Un margen de +0.01 se brincaba la parada cuando un cuadro caia a menos de 0.01.)
+      const parada = R.paradas.find(p => p > R.pos + 1e-9 && p <= nueva);
+      if (parada !== undefined) {
+        R.pos = parada;
+        ponerScroll();
+        pausar();
+        avisar("Bloque: dilo con tus palabras. Espacio o ↓ para seguir.", 0);
+        return;
+      }
+    }
+    R.pos = nueva;
+  }
+  if (R.pos >= R.total) {
+    R.pos = R.total;
+    ponerScroll();
+    pausar();
+    avisar(S.toma + 1 < R.tomas.length ? "Fin de la toma. N para la siguiente." : "Fin del guion.", 4000);
+    return;
+  }
+  ponerScroll();
+  actualizarHud();
+  R.raf = requestAnimationFrame(cuadro);
+}
+
+function iniciar() {
+  if (!R.tomas.length || R.corriendo || R.cuentaTimer) return;
+  if (R.pos >= R.total - 0.01) { R.pos = 0; R.transcurrido = 0; ponerScroll(); }
+  ocultarAviso();
+  if (S.cuenta > 0 && R.pos < 0.5) {
+    let n = S.cuenta;
+    el.cuenta.style.display = "flex";
+    el.cuenta.textContent = n;
+    R.cuentaTimer = setInterval(() => {
+      n--;
+      if (n > 0) { el.cuenta.textContent = n; return; }
+      cancelarCuenta();
+      arrancar();
+    }, 1000);
+    return;
+  }
+  arrancar();
+}
+function arrancar() {
+  R.corriendo = true;
+  R.ultimoTs = performance.now();
+  document.body.classList.add("corriendo");
+  el.play.textContent = "⏸ Pausar";
+  pedirPantallaEncendida();
+  R.raf = requestAnimationFrame(cuadro);
+}
+function cancelarCuenta() {
+  clearInterval(R.cuentaTimer);
+  R.cuentaTimer = null;
+  el.cuenta.style.display = "none";
+}
+function pausar() {
+  cancelarCuenta();
+  R.corriendo = false;
+  cancelAnimationFrame(R.raf);
+  document.body.classList.remove("corriendo");
+  el.play.textContent = "▶ Iniciar";
+  actualizarHud();
+}
+function alternar() { (R.corriendo || R.cuentaTimer) ? pausar() : iniciar(); }
+
+function alInicio() {
+  pausar();
+  R.pos = 0; R.transcurrido = 0; R.objetivoVoz = R.escuchando ? 0 : null;
+  ocultarAviso();
+  ponerScroll();
+  actualizarHud();
+}
+
+// Siguiente parrafo o bloque: si estaba parado en un bloque, simplemente sigue.
+function adelante() {
+  ocultarAviso();
+  const sig = R.parrafos.find(p => p > R.pos + 0.5);
+  if (!R.corriendo && S.bloques && R.paradas.some(p => Math.abs(p - R.pos) < 0.02)) { iniciar(); return; }
+  R.pos = sig !== undefined ? sig : R.total;
+  if (R.escuchando) R.objetivoVoz = R.pos;
+  ponerScroll();
+  actualizarHud();
+}
+function atras() {
+  ocultarAviso();
+  const previos = R.parrafos.filter(p => p < R.pos - 0.5);
+  R.pos = previos.length ? previos[previos.length - 1] : 0;
+  if (R.escuchando) R.objetivoVoz = R.pos;
+  ponerScroll();
+  actualizarHud();
+}
+
+function irAToma(i) {
+  if (!R.tomas.length) return;
+  S.toma = Math.max(0, Math.min(R.tomas.length - 1, i));
+  el.toma.value = S.toma;
+  pausar();
+  R.pos = 0; R.transcurrido = 0; R.objetivoVoz = R.escuchando ? 0 : null;
+  ocultarAviso();
+  pintarToma();
+  guardar();
+}
+
+// ---------------------------------------------------------------------------
+// Seguir la voz (reconocimiento de voz de Chrome)
+// ---------------------------------------------------------------------------
+function normal(w) { return quitarAcentos(w.toLowerCase()).replace(/[^a-z0-9]/g, ""); }
+
+const Reconocedor = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+
+function alternarVoz() {
+  if (!Reconocedor) { avisar("Este navegador no reconoce voz. Usa Chrome o Edge.", 5000); return; }
+  if (R.escuchando) { detenerVoz(); return; }
+  if (!rec) {
+    rec = new Reconocedor();
+    rec.lang = "es-MX";
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.onresult = alOir;
+    rec.onend = () => { if (R.escuchando) setTimeout(() => { try { rec.start(); } catch (e) {} }, 200); };
+    rec.onerror = e => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        detenerVoz();
+        avisar("El navegador no dio permiso al micrófono.", 6000);
+      } else if (e.error === "network") {
+        avisar("Seguir la voz necesita internet (Chrome manda el audio a Google).", 6000);
+      }
+    };
+  }
+  pausar();
+  R.escuchando = true;
+  R.objetivoVoz = R.pos;
+  try { rec.start(); } catch (e) {}
+  el.voz.textContent = "🎙 Seguir mi voz: Sí";
+  el.voz.classList.add("grabando");
+  // Mientras escucha, el cuadro corre para mover el texto suave hacia donde vas.
+  R.corriendo = true;
+  R.ultimoTs = performance.now();
+  document.body.classList.add("corriendo");
+  el.play.textContent = "⏸ Pausar";
+  R.raf = requestAnimationFrame(cuadro);
+  // Abierto como archivo, Chrome no recuerda el permiso y lo pide en cada reinicio del
+  // reconocimiento (al final de cada frase). Abierto con abrir_teleprompter.pyw, una vez.
+  if (location.protocol === "file:") avisar("Abierto con doble clic, el micrófono va a pedir permiso a cada rato. Ábrelo con «abrir_teleprompter» y lo pide una sola vez.", 9000);
+  else avisar("Te escucho. El texto avanza cuando hablas.", 3000);
+}
+function detenerVoz() {
+  R.escuchando = false;
+  R.objetivoVoz = null;
+  try { rec && rec.stop(); } catch (e) {}
+  el.voz.textContent = "🎙 Seguir mi voz: No";
+  el.voz.classList.remove("grabando");
+  pausar();
+}
+
+function alOir(e) {
+  let oido = "";
+  for (let i = Math.max(0, e.results.length - 2); i < e.results.length; i++) oido += " " + e.results[i][0].transcript;
+  const fichas = oido.split(/\s+/).map(normal).filter(Boolean);
+  if (!fichas.length) return;
+  const P = R.palabras;
+  let actual = P.findIndex(p => p.u >= R.pos - 0.5);
+  if (actual < 0) actual = P.length;
+  const desde = Math.max(0, actual - 4), hasta = Math.min(P.length - 1, actual + 40);
+  const coincide = (k, n) => {
+    for (let j = 0; j < n; j++) if (k - j < 0 || P[k - j].n !== fichas[fichas.length - 1 - j]) return false;
+    return true;
+  };
+  let fin = -1;
+  // Primero tres palabras seguidas; si no, dos; si no, una palabra larga cercana.
+  for (let k = desde; k <= hasta && fin < 0; k++) if (fichas.length >= 3 && coincide(k, 3)) fin = k;
+  for (let k = desde; k <= hasta && fin < 0; k++) {
+    if (fichas.length >= 2 && fichas.slice(-2).every(f => f.length >= 3) && coincide(k, 2)) fin = k;
+  }
+  if (fin < 0 && fichas[fichas.length - 1].length >= 5) {
+    for (let k = actual; k <= Math.min(P.length - 1, actual + 10) && fin < 0; k++) if (coincide(k, 1)) fin = k;
+  }
+  if (fin < 0) return;
+  const objetivo = fin + 1 < P.length ? P[fin + 1].u : R.total;
+  if (objetivo > R.objetivoVoz || fin < actual - 1) R.objetivoVoz = objetivo;
+}
+
+// ---------------------------------------------------------------------------
+// HUD, avisos, estadisticas
+// ---------------------------------------------------------------------------
+const mmss = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+
+function duracionDe(texto) {
+  let u = 0, bloques = 0;
+  for (const ln of clasificar(texto)) {
+    if (ln.t === "blank") u += S.pausa * S.ppm / 60;
+    else if (ln.t === "say") u += ln.texto.split(/\s+/).filter(Boolean).length;
+    else if (ln.t === "item") bloques++;
+  }
+  return { seg: u / S.ppm * 60, bloques };
+}
+
+function actualizarHud() {
+  if (!R.tomas.length) { el.hud.textContent = S.ppm + " ppm"; return; }
+  const d = duracionDe(R.tomas[S.toma] || "");
+  const partes = [];
+  if (R.tomas.length > 1) partes.push("Toma " + (S.toma + 1) + "/" + R.tomas.length);
+  partes.push(mmss(R.transcurrido) + " / ~" + mmss(d.seg) + (d.bloques ? " + " + d.bloques + " bloques" : ""));
+  partes.push(R.escuchando ? "🎙 voz" : S.ppm + " ppm");
+  el.hud.textContent = partes.join(" · ");
+}
+
+function actualizarStats() {
+  if (!R.tomas.length) { el.stats.textContent = "Sin texto."; return; }
+  let palabras = 0, seg = 0, bloques = 0;
+  for (const t of R.tomas) {
+    for (const ln of clasificar(t)) if (ln.t === "say") palabras += ln.texto.split(/\s+/).filter(Boolean).length;
+    const d = duracionDe(t); seg += d.seg; bloques += d.bloques;
+  }
+  el.stats.innerHTML =
+    "<b>" + R.tomas.length + "</b> " + (R.tomas.length === 1 ? "toma" : "tomas") +
+    " · <b>" + palabras + "</b> palabras para leer<br>" +
+    "Leído a " + S.ppm + " ppm: <b>~" + mmss(seg) + "</b>" +
+    (bloques ? "<br><b>" + bloques + "</b> bloques para platicar (no cuentan en el tiempo)" : "");
+}
+
+function avisar(texto, ms) {
+  clearTimeout(R.avisoTimer);
+  el.aviso.textContent = texto;
+  el.aviso.style.display = "block";
+  if (ms) R.avisoTimer = setTimeout(ocultarAviso, ms);
+}
+function ocultarAviso() { clearTimeout(R.avisoTimer); el.aviso.style.display = "none"; }
+
+let candado = null;
+async function pedirPantallaEncendida() {
+  try { if ("wakeLock" in navigator && !candado) { candado = await navigator.wakeLock.request("screen"); candado.addEventListener("release", () => candado = null); } } catch (e) {}
+}
+
+// ---------------------------------------------------------------------------
+// Controles
+// ---------------------------------------------------------------------------
+const DESLIZADORES = [
+  { k: "ppm", caja: "controles-ritmo", txt: "Velocidad", min: 60, max: 250, paso: 5, fmt: v => v + " palabras/min" },
+  { k: "pausa", caja: "controles-ritmo", txt: "Pausa en línea en blanco", min: 0, max: 2, paso: 0.1, fmt: v => v.toFixed(1) + " s" },
+  { k: "tam", caja: "controles-pantalla", txt: "Tamaño de letra", min: 28, max: 160, paso: 2, fmt: v => v + " px" },
+  { k: "margen", caja: "controles-pantalla", txt: "Márgenes (columna más angosta)", min: 2, max: 40, paso: 1, fmt: v => v + "%" },
+  { k: "interlineado", caja: "controles-pantalla", txt: "Interlineado", min: 1, max: 2.4, paso: 0.05, fmt: v => v.toFixed(2) },
+  { k: "lectura", caja: "controles-pantalla", txt: "Altura de la línea de lectura", min: 8, max: 60, paso: 1, fmt: v => v + "% desde arriba" }
+];
+const deslizadores = {};
+for (const d of DESLIZADORES) {
+  const c = document.createElement("div");
+  c.className = "control";
+  c.innerHTML = '<label><span>' + d.txt + '</span><span></span></label><input type="range">';
+  const inp = c.querySelector("input"), val = c.querySelector("label span:last-child");
+  Object.assign(inp, { min: d.min, max: d.max, step: d.paso });
+  inp.addEventListener("input", () => { S[d.k] = parseFloat(inp.value); aplicar(); });
+  inp.addEventListener("change", () => inp.blur());
+  $(d.caja).appendChild(c);
+  deslizadores[d.k] = { inp, val, d };
+}
+
+function aplicar() {
+  for (const k in deslizadores) {
+    const { inp, val, d } = deslizadores[k];
+    inp.value = S[k];
+    val.textContent = d.fmt(S[k]);
+  }
+  const c = el.contenido;
+  c.style.fontSize = S.tam + "px";
+  c.style.lineHeight = S.interlineado;
+  c.style.paddingLeft = c.style.paddingRight = S.margen + "vw";
+  c.style.textAlign = S.centro ? "center" : "left";
+  c.classList.toggle("espejo", S.espejo);
+  document.documentElement.style.setProperty("--read", S.lectura + "%");
+  document.body.classList.toggle("con-guia", S.guia);
+  document.body.classList.toggle("atenuar", S.atenuar);
+
+  $("btn-alinear").textContent = S.centro ? "Centro" : "Izquierda";
+  for (const [id, k] of [["btn-guia", "guia"], ["btn-atenuar", "atenuar"], ["btn-espejo", "espejo"], ["btn-bloques", "bloques"]]) {
+    $(id).classList.toggle("activo", !!S[k]);
+  }
+  $("btn-cuenta").textContent = S.cuenta ? "Cuenta: " + S.cuenta + " s" : "Sin cuenta";
+  $("btn-cuenta").classList.toggle("activo", S.cuenta > 0);
+
+  if (R.lineas) medir();
+  actualizarStats();
+  guardar();
+}
+
+function cargarTexto(texto, conservarToma) {
+  S.texto = texto;
+  el.texto.value = texto;
+  R.tomas = partirTomas(texto);
+  el.toma.innerHTML = "";
+  R.tomas.forEach((t, i) => {
+    const o = document.createElement("option");
+    const primera = t.split("\n").find(l => l.trim() && !RX_ENCABEZADO.test(l)) || t.split("\n")[0];
+    o.value = i;
+    o.textContent = (i + 1) + ". " + primera.trim().slice(0, 48);
+    el.toma.appendChild(o);
+  });
+  if (!conservarToma) S.toma = 0;
+  S.toma = Math.max(0, Math.min(S.toma, Math.max(0, R.tomas.length - 1)));
+  el.toma.value = S.toma;
+  el.toma.disabled = R.tomas.length < 2;
+  pintarToma();
+  actualizarStats();
+  guardar();
+}
+
+let esperaTexto = null;
+el.texto.addEventListener("input", () => {
+  clearTimeout(esperaTexto);
+  esperaTexto = setTimeout(() => cargarTexto(el.texto.value, true), 300);
+});
+el.toma.addEventListener("change", () => { irAToma(parseInt(el.toma.value, 10)); el.toma.blur(); });
+
+// Un .txt guardado en Windows puede venir en Latin-1: si UTF-8 deja simbolos rotos, se relee.
+function leerArchivo(archivo) {
+  const lector = new FileReader();
+  lector.onload = () => {
+    const t = lector.result;
+    if (t.includes("�")) {
+      const otro = new FileReader();
+      otro.onload = () => { cargarTexto(otro.result); avisar("Abierto: " + archivo.name, 2500); };
+      otro.readAsText(archivo, "windows-1252");
+      return;
+    }
+    cargarTexto(t);
+    avisar("Abierto: " + archivo.name, 2500);
+  };
+  lector.readAsText(archivo, "utf-8");
+}
+$("archivo").addEventListener("change", e => { if (e.target.files[0]) leerArchivo(e.target.files[0]); e.target.value = ""; });
+let arrastres = 0;
+document.addEventListener("dragenter", e => { e.preventDefault(); arrastres++; document.body.classList.add("arrastrando"); });
+document.addEventListener("dragleave", () => { if (--arrastres <= 0) { arrastres = 0; document.body.classList.remove("arrastrando"); } });
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", e => {
+  e.preventDefault(); arrastres = 0; document.body.classList.remove("arrastrando");
+  const f = e.dataTransfer.files[0];
+  if (f) leerArchivo(f);
+});
+
+function alternarPanel() {
+  document.body.classList.toggle("panel-oculto");
+  setTimeout(medir, 0);
+}
+function pantallaCompleta() {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+  else document.exitFullscreen();
+}
+
+const clic = (id, fn) => $(id).addEventListener("click", e => { fn(); e.currentTarget.blur(); });
+clic("btn-play", alternar);
+clic("btn-reset", alInicio);
+clic("btn-ant", () => irAToma(S.toma - 1));
+clic("btn-sig", () => irAToma(S.toma + 1));
+clic("btn-voz", alternarVoz);
+clic("btn-alinear", () => { S.centro = !S.centro; aplicar(); });
+clic("btn-guia", () => { S.guia = !S.guia; aplicar(); });
+clic("btn-atenuar", () => { S.atenuar = !S.atenuar; aplicar(); });
+clic("btn-espejo", () => { S.espejo = !S.espejo; aplicar(); });
+clic("btn-bloques", () => { S.bloques = !S.bloques; aplicar(); });
+clic("btn-cuenta", () => { S.cuenta = S.cuenta === 0 ? 3 : S.cuenta === 3 ? 5 : 0; aplicar(); });
+clic("btn-full", pantallaCompleta);
+clic("btn-ocultar", alternarPanel);
+clic("btn-panel", alternarPanel);
+clic("btn-limpiar", () => { cargarTexto(""); el.texto.focus(); });
+clic("btn-ejemplo", () => cargarTexto(EJEMPLO));
+el.envoltura.addEventListener("click", () => { if (!window.getSelection().toString()) alternar(); });
+
+document.addEventListener("keydown", e => {
+  const t = e.target.tagName;
+  if (t === "TEXTAREA" || t === "SELECT" || (t === "INPUT" && e.target.type !== "range")) return;
+  if (t === "INPUT") e.target.blur();
+  const cambiarPpm = d => { S.ppm = Math.max(60, Math.min(250, S.ppm + d)); aplicar(); actualizarHud(); };
+  const cambiarTam = d => { S.tam = Math.max(28, Math.min(160, S.tam + d)); aplicar(); };
+  switch (e.code) {
+    case "Space": case "KeyK": e.preventDefault(); R.escuchando ? detenerVoz() : alternar(); break;
+    case "ArrowDown": case "ArrowRight": case "PageDown":
+      e.preventDefault();
+      if (e.shiftKey && e.code === "ArrowDown") cambiarPpm(-5); else adelante();
+      break;
+    case "ArrowUp": case "ArrowLeft": case "PageUp":
+      e.preventDefault();
+      if (e.shiftKey && e.code === "ArrowUp") cambiarPpm(5); else atras();
+      break;
+    case "KeyN": irAToma(S.toma + 1); break;
+    case "KeyP": irAToma(S.toma - 1); break;
+    case "KeyR": case "Home": alInicio(); break;
+    case "KeyV": alternarVoz(); break;
+    case "KeyH": alternarPanel(); break;
+    case "KeyF": pantallaCompleta(); break;
+    case "KeyM": S.espejo = !S.espejo; aplicar(); break;
+    case "NumpadAdd": case "Equal": cambiarTam(2); break;
+    case "NumpadSubtract": case "Minus": cambiarTam(-2); break;
+  }
+});
+
+let esperaMedida = null;
+window.addEventListener("resize", () => { clearTimeout(esperaMedida); esperaMedida = setTimeout(medir, 120); });
+
+// ---------------------------------------------------------------------------
+cargar();
+R.lineas = null;
+aplicar();
+cargarTexto(S.texto, true);
+if (window.innerWidth <= 760 && S.texto) document.body.classList.add("panel-oculto");
+</script>
+</body>
+</html>
