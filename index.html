@@ -422,8 +422,11 @@ function medir() {
     if (f.ln.t !== "blank" && f.ln.t !== "head" && !(f.inicioLinea && f.ln.parada)) palabrasDesdeParada += f.spans.length;
     if (f.ln.t !== "blank" && (anteriorEnBlanco || f.ln.parada) && f.inicioLinea) R.parrafos.push(u);
     anteriorEnBlanco = f.ln.t === "blank";
-    if (f.ln.t !== "head") {
-      f.spans.forEach((s, k) => R.palabras.push({ n: normal(s.textContent), u: u + k * (f.u / f.spans.length) }));
+    // La voz solo se ubica en lo que se LEE: lo ambar de un bloque se platica con otras
+    // palabras y nunca va a coincidir. Por eso no entra, y la voz pasa de largo por el.
+    if (f.ln.t === "say") {
+      const paso = f.u / f.spans.length;
+      f.spans.forEach((s, k) => R.palabras.push({ n: normal(s.textContent), u: u + k * paso, fin: u + (k + 1) * paso }));
     }
     u += f.u;
   });
@@ -671,22 +674,31 @@ function alOir(e) {
   const P = R.palabras;
   let actual = P.findIndex(p => p.u >= R.pos - 0.5);
   if (actual < 0) actual = P.length;
-  const desde = Math.max(0, actual - 4), hasta = Math.min(P.length - 1, actual + 40);
+  // Hacia adelante busca lejos: si te saltas un bloque platicado o una frase, te encuentra.
+  const desde = Math.max(0, actual - 3), hasta = Math.min(P.length - 1, actual + 60);
   const coincide = (k, n) => {
+    if (fichas.length < n) return false;
     for (let j = 0; j < n; j++) if (k - j < 0 || P[k - j].n !== fichas[fichas.length - 1 - j]) return false;
     return true;
   };
   let fin = -1;
   // Primero tres palabras seguidas; si no, dos; si no, una palabra larga cercana.
-  for (let k = desde; k <= hasta && fin < 0; k++) if (fichas.length >= 3 && coincide(k, 3)) fin = k;
+  for (let k = desde; k <= hasta && fin < 0; k++) if (coincide(k, 3)) fin = k;
   for (let k = desde; k <= hasta && fin < 0; k++) {
-    if (fichas.length >= 2 && fichas.slice(-2).every(f => f.length >= 3) && coincide(k, 2)) fin = k;
+    if (fichas.slice(-2).every(f => f.length >= 3) && coincide(k, 2)) fin = k;
   }
   if (fin < 0 && fichas[fichas.length - 1].length >= 5) {
     for (let k = actual; k <= Math.min(P.length - 1, actual + 10) && fin < 0; k++) if (coincide(k, 1)) fin = k;
   }
+  // Hacia atras, solo con cuatro palabras seguidas (y la mas cercana): si repites una frase
+  // de antes, el texto regresa contigo; con menos, una muletilla comun lo haria brincar.
+  if (fin < 0) {
+    for (let k = desde - 1; k >= Math.max(0, actual - 80) && fin < 0; k--) if (coincide(k, 4)) fin = k;
+  }
   if (fin < 0) return;
-  const objetivo = fin + 1 < P.length ? P[fin + 1].u : R.total;
+  // Se queda al FINAL de lo que dijiste, no al inicio de lo que sigue: si lo que sigue es un
+  // bloque para platicar, queda a la vista en vez de pasarse de largo.
+  const objetivo = P[fin].fin;
   if (objetivo > R.objetivoVoz || fin < actual - 1) R.objetivoVoz = objetivo;
 }
 
